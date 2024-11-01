@@ -1,92 +1,94 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using AutoMapper;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using ShopAPI.ApplicationDbContext;
+using ShopAPI.DTOs;
 using ShopAPI.Models;
-using ShopAPI.Services;
 
 namespace ShopAPI.Controllers
 {
-    [ApiController]
     [Route("api/[controller]")]
+    [ApiController]
     public class CategoriesController : ControllerBase
     {
-        private readonly ICategoryService _categoryService;
+        private readonly AppDbContext _context;
+        private readonly IMapper _mapper;
 
-        public CategoriesController(ICategoryService categoryService)
+        public CategoriesController(AppDbContext context, IMapper mapper)
         {
-            _categoryService = categoryService;
+            _context = context;
+            _mapper = mapper;
         }
 
-        // GET: api/categories
+
         [HttpGet]
-        public async Task<IActionResult> GetCategories()
+        public async Task<ActionResult<IEnumerable<CategoryDto>>> GetCategories()
         {
-            try
-            {
-                var categories = await _categoryService.GetAllCategoriesAsync();
-                return Ok(categories);
-            }
-            catch (Exception ex)
-            {
-                // Log the error details (implement logging as needed)
-                Console.WriteLine($"Error retrieving categories: {ex.Message}");
-                return StatusCode(500, "Internal server error.");
-            }
+            var categories = await _context.Categories.ToListAsync();
+            return Ok(_mapper.Map<IEnumerable<CategoryDto>>(categories));
         }
 
-        // GET: api/categories/5
+
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetCategory(int id)
+        public async Task<ActionResult<CategoryDto>> GetCategory(int id)
         {
-            var category = await _categoryService.GetCategoryByIdAsync(id);
+            var category = await _context.Categories.FindAsync(id);
+
             if (category == null)
             {
                 return NotFound();
             }
-            return Ok(category);
+
+            return Ok(_mapper.Map<CategoryDto>(category));
         }
 
-        // POST: api/categories
+
         [HttpPost]
-        public async Task<IActionResult> CreateCategory([FromBody] Category category)
+        public async Task<ActionResult<CategoryDto>> CreateCategory(CategoryCreateDto categoryCreateDto)
         {
-            if (category == null)
-            {
-                return BadRequest();
-            }
+            var category = _mapper.Map<Category>(categoryCreateDto);
+            _context.Categories.Add(category);
+            await _context.SaveChangesAsync();
 
-            await _categoryService.CreateCategoryAsync(category);
-            return CreatedAtAction(nameof(GetCategory), new { id = category.CategoryId }, category); // Use CategoryId here
+            var categoryDto = _mapper.Map<CategoryDto>(category);
+            return CreatedAtAction(nameof(GetCategory), new { id = category.CategoryId }, categoryDto);
         }
 
-        // PUT: api/categories/5
+
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateCategory(int id, [FromBody] Category category)
+        public async Task<IActionResult> UpdateCategory(int id, CategoryCreateDto categoryCreateDto)
         {
-            if (id != category.CategoryId) // Use CategoryId here
+            if (id <= 0)
             {
                 return BadRequest();
             }
 
-            var existingCategory = await _categoryService.GetCategoryByIdAsync(id);
-            if (existingCategory == null)
+            var category = await _context.Categories.FindAsync(id);
+            if (category == null)
             {
                 return NotFound();
             }
 
-            await _categoryService.UpdateCategoryAsync(category);
+            _mapper.Map(categoryCreateDto, category);
+            _context.Entry(category).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+
             return NoContent();
         }
 
-        // DELETE: api/categories/5
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCategory(int id)
         {
-            var existingCategory = await _categoryService.GetCategoryByIdAsync(id);
-            if (existingCategory == null)
+            var category = await _context.Categories.FindAsync(id);
+            if (category == null)
             {
                 return NotFound();
             }
 
-            await _categoryService.DeleteCategoryAsync(id);
+            _context.Categories.Remove(category);
+            await _context.SaveChangesAsync();
+
             return NoContent();
         }
     }
